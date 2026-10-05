@@ -1,14 +1,37 @@
 # NCU gym monitor
 
-Private official published-count observations for the NCU weight room.
+One private repository, one GitHub Actions workflow, one Python collector, one CSV.
+Your computer does not need to be on. No AI calls, website synchronization, external scheduler, or manually maintained credentials.
 
-- Official page: https://pe.ncu.edu.tw/about/66.html
-- `collect.py` reads the exact 重訓室 row from the official linked published CSV.
-- GitHub Actions schedules retrieval at minute 7, 27 and 47 of every hour. Queuing may delay or miss a run. Timestamps are actual retrieval times in Asia/Taipei; missed observations are never fabricated.
-- The source gives no last-update timestamp. These are observations of published counts, not guaranteed source refresh times.
-- Normal hours 09:00–20:50 daily, subject to official closures. Outside normal hours: closed/null. Unavailable or ambiguous numeric values: missing/null. A real zero is valid.
-- Records are appended to `data/records.json`. No Site credential is stored here or in Actions.
-- Collection ends 2026-10-12 10:00 Asia/Taipei. The first workflow after that disables itself.
-- The linked owner-private Site is https://ncu-gym-traffic.huangkaiyu0522.chatgpt.site , project `appgprj_6ac2fe3ade68819191345d337293e45d`.
-- Its existing hourly cloud task retrieves this file through the authorized GitHub connector, obtains a fresh Sites service credential in memory, batches validated records into POST /api/records, and verifies them by dated GET /api/records. Timestamp conflicts are skipped. Only actual captured observations are imported.
-- Quiet operation except collection/save failures or final week summary; occupancy averages exclude closed and missing records.
+## Where to check
+- Read or download [data/records.csv](data/records.csv).
+- Open the repository's **Actions** tab and check the latest execution and its timestamp.
+- The main branch is the authoritative data. The CSV opens in Excel (UTF-8 BOM).
+- A green push/manual execution proves that one collection worked; only an execution marked **schedule** proves the timer triggered.
+- If the CSV's latest timestamp stops advancing, inspect Actions. A missing scheduled execution does not necessarily generate a failure notification.
+- To stop early: Actions → NCU gym CSV collector → menu → Disable workflow.
+- To take one current observation manually: Actions → NCU gym CSV collector → Run workflow.
+
+## Timing
+Scheduled for minute **13, 33, 53** of every hour, about 20 minutes apart, away from the hourly peak.
+Collection ends **2026-10-12 10:00 Asia/Taipei**, preserving the original one-week study. The first subsequent execution disables the workflow.
+GitHub's scheduler is best effort: a run can be delayed or dropped. A schedule configuration is not a guarantee of exact intervals.
+There are no waiting jobs running between observations; each run exits after collecting and committing.
+
+## Data correctness
+Columns: timestamp, count, status, source.
+- timestamp: actual retrieval time in Asia/Taipei, never scheduled time.
+- open: a unique exact 重訓室 row with a nonnegative integer; real 0 is valid.
+- missing: source unavailable, ambiguous or nonnumeric; count is blank and source explains why.
+- closed: inferred outside normal 09:00–20:50 hours; count is blank. Temporary closure announcements are not automatically checked.
+- Source: https://pe.ncu.edu.tw/about/66.html and its linked published CSV.
+- The official source provides no last-update time. A row captures the published count as seen at retrieval, not a guarantee it was freshly updated.
+- Missed executions remain gaps. No fabricated readings or historical backfill with a current number.
+- Two previous genuine JSON observations are migrated once, preserving their original timestamps/counts/status/source. The old JSON remains as an archive and is no longer updated.
+- Network errors are retried once when safe. Source failure is saved as missing, then the workflow is marked failed. Invalid stored data fails without overwriting it.
+- Concurrent collector runs are serialized. Commit push is retried once after a rebase.
+
+## Costs and privacy
+The repository stays private. Only GitHub Actions compute is used; its account usage limits still apply.
+The CSV is not sent to the previous Site. The ChatGPT hourly sync is paused.
+GitHub schedule behavior: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
