@@ -1,14 +1,6 @@
 name: NCU weekday hourly CSV
 on:
-  schedule:
-    # UTC 01:30–12:30 = Taiwan 09:30–20:30, Monday through Friday.
-    - cron: '30 1-12 * * 1-5'
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - collect.py
-      - .github/workflows/sample.yml
 permissions:
   contents: write
 concurrency:
