@@ -26,12 +26,15 @@ jobs:
         if: github.event_name == 'push'
         run: |
           python3 - <<'PY'
-          from collect import retrieve
+          from collect import retrieve, eligible, now
           count, error = retrieve()
-          if error:
+          if error and eligible(now()):
               raise RuntimeError(error)
-          assert type(count) is int and count >= 0
-          print("Live official count parsed successfully:", count)
+          if error:
+              print("Outside sampling window: official source has no numeric count; no observation created.")
+          else:
+              assert type(count) is int and count >= 0
+              print("Live official count parsed successfully:", count)
           print("This is a connection check; no out-of-hours CSV observation is created.")
           PY
       - name: Capture weekday hourly observation
