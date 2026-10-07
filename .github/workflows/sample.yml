@@ -1,7 +1,8 @@
-name: NCU gym CSV collector
+name: NCU weekday hourly CSV
 on:
   schedule:
-    - cron: '13,33,53 * * * *'
+    # UTC 01:30–12:30 = Taiwan 09:30–20:30, Monday through Friday.
+    - cron: '30 1-12 * * 1-5'
   workflow_dispatch:
   push:
     branches: [main]
@@ -10,7 +11,6 @@ on:
       - .github/workflows/sample.yml
 permissions:
   contents: write
-  actions: write
 concurrency:
   group: gym-collector
   cancel-in-progress: false
@@ -22,38 +22,32 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: main
-      - name: Check collection period
-        id: period
+      - name: Verify official source on setup changes
+        if: github.event_name == 'push'
         run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          from datetime import datetime, timezone
-          print("active=" + str(datetime.now(timezone.utc) < datetime.fromisoformat("2026-10-12T02:00:00+00:00")).lower())
+          python3 - <<'PY'
+          from collect import retrieve
+          count, error = retrieve()
+          if error:
+              raise RuntimeError(error)
+          assert type(count) is int and count >= 0
+          print("Live official count parsed successfully:", count)
+          print("This is a connection check; no out-of-hours CSV observation is created.")
           PY
-      - name: Capture official published count
+      - name: Capture weekday hourly observation
         id: capture
-        if: steps.period.outputs.active == 'true'
         run: python3 collect.py
       - name: Commit CSV
-        if: steps.period.outputs.active == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/records.csv
+          git add data/weekday_hourly.csv
           if ! git diff --cached --quiet; then
-            git commit -m "Record occupancy at actual retrieval time"
+            git commit -m "Record weekday hourly occupancy at actual retrieval time"
             git push origin HEAD:main || { git pull --rebase origin main && git push origin HEAD:main; }
           fi
-      - name: Flag unavailable source after preserving observation
+      - name: Flag unavailable source after saving missing record
         if: steps.capture.outputs.status == 'missing'
         run: |
-          echo "::error::Official source unavailable; missing observation saved in CSV."
+          echo "::error::Official source unavailable; missing record saved with blank count."
           exit 1
-      - name: Stop after authorized week
-        if: steps.period.outputs.active != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          curl --fail --silent --show-error -X PUT \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/sample.yml/disable"
