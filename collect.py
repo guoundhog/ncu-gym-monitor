@@ -4,7 +4,15 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 SOURCE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTi7PeVb_4bE22ioWlIMlYwoaDbOQiq7fdn3VRAmS_5V60_9cmTh3P8e97jfvT5X867teqRsMoGY_Ou/pub?gid=0&single=true&output=csv"
-END = datetime.fromisoformat("2026-10-12T10:00:00+08:00")
+DATA = Path("data/weekday_hourly.csv")
+
+def eligible(stamp):
+    local = stamp.astimezone(ZoneInfo("Asia/Taipei"))
+    return local.weekday() < 5 and time(9,30) <= local.time() <= time(20,50)
+
+def slot(stamp):
+    local = stamp.astimezone(ZoneInfo("Asia/Taipei"))
+    return local.date(), (local.hour * 60 + local.minute - 570) // 60
 def now():
     return datetime.now(ZoneInfo("Asia/Taipei")).replace(microsecond=0)
 def parse(raw):
@@ -57,7 +65,7 @@ def validate(record):
     if not isinstance(record["source"], str) or not record["source"]:
         raise ValueError("Missing source")
 
-def save(record, path=Path("data/records.csv"), legacy=Path("data/records.json")):
+def save(record, path=DATA):
     validate(record)
     if path.exists():
         with path.open(encoding="utf-8-sig", newline="") as handle:
@@ -71,7 +79,7 @@ def save(record, path=Path("data/records.csv"), legacy=Path("data/records.json")
                 raise ValueError("Invalid stored count")
             row["count"] = int(value) if value else None
     else:
-        records = json.loads(legacy.read_text(encoding="utf-8")) if legacy.exists() else []
+        records = []
     if not isinstance(records, list):
         raise ValueError("Invalid stored records")
     seen = {}
@@ -80,6 +88,10 @@ def save(record, path=Path("data/records.csv"), legacy=Path("data/records.json")
         if row["timestamp"] in seen:
             raise ValueError("Duplicate stored timestamp")
         seen[row["timestamp"]] = row
+    for row in records:
+        if slot(datetime.fromisoformat(row["timestamp"])) == slot(datetime.fromisoformat(record["timestamp"])):
+            print("This hourly slot already has an observation; skipped.")
+            return
     if record["timestamp"] in seen:
         if seen[record["timestamp"]] != record:
             raise ValueError("Conflicting timestamp")
@@ -94,12 +106,13 @@ def save(record, path=Path("data/records.csv"), legacy=Path("data/records.json")
     os.replace(temporary, path)
 
 def main():
-    if now() >= END:
-        print("Collection period ended.")
+    if not eligible(now()):
+        print("Outside weekday 09:30–20:50 sampling window; skipped.")
         return
     count, error = retrieve()
     retrieved = now()
-    if retrieved >= END:
+    if not eligible(retrieved):
+        print("Retrieval completed outside sampling window; skipped.")
         return
     record = observation(retrieved, count, error)
     save(record)
